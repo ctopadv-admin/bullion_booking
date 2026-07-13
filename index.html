@@ -3,106 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Book Instruments</title>
-    <!-- टेलीग्राम मिनी ऐप की मुख्य स्क्रिप्ट -->
-    <script src="https://telegram.org"></script>
+    <title>Booking Confirmation</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 15px; background-color: #f4f6f9; color: #333; margin: 0; }
-        h3 { text-align: center; color: #2c3e50; margin-bottom: 20px; }
-        .loading { text-align: center; font-size: 16px; color: #7f8c8d; margin-top: 50px; }
-        .item-container { background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: space-between; }
-        .item-info { flex: 1; }
-        .item-title { font-weight: bold; font-size: 16px; color: #2c3e50; }
-        .item-rate { color: #27ae60; font-size: 14px; margin-top: 4px; font-weight: 600; }
-        .input-box { width: 80px; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; text-align: center; outline: none; -moz-appearance: textfield; }
-        .input-box::-webkit-outer-spin-button, .input-box::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        .submit-btn { width: 100%; padding: 14px; font-size: 16px; background-color: #248bcf; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 6px rgba(36,139,207,0.2); }
-        .submit-btn:disabled { background-color: #bdc3c7; cursor: not-allowed; box-shadow: none; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; margin: 0; }
+        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); text-align: center; max-width: 400px; width: 90%; }
+        
+        /* Firm Name Styling */
+        h2 { color: #1a1a1a; margin-bottom: 20px; font-size: 24px; font-weight: 600; }
+        
+        /* Sky-Blue Highlight Box (Like Telegram Blockquote, No Quotes) */
+        .highlight-box { background-color: #e3f2fd; border-left: 4px solid #2196f3; padding: 12px; border-radius: 4px; margin: 20px 0; text-align: left; font-size: 15px; color: #0d47a1; word-wrap: break-word; }
+        
+        .label-text { font-size: 16px; color: #4a4a4a; display: block; text-align: left; margin-bottom: 5px; }
+        input[type="number"] { width: 100%; padding: 12px; margin: 10px 0 20px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+        input:focus { border-color: #2196f3; outline: none; }
+        
+        button { background-color: #0088cc; color: white; border: none; padding: 14px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; transition: background 0.2s; }
+        button:hover { background-color: #0077b3; }
+        .success-msg { color: #2e7d32; font-weight: bold; margin-top: 15px; display: none; background: #e8f5e9; padding: 10px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
-    <h3>Your Instruments List</h3>
-    <div id="loading" class="loading">Fetching your custom list...</div>
-    <div id="list-container"></div>
-    <button id="submitBtn" class="submit-btn" onclick="submitData()" disabled>Confirm & Submit Booking</button>
+<div class="container">
+    <!-- 1. Firm Name Dynamic Display -->
+    <h2 id="firmName">Loading Firm...</h2>
+    
+    <!-- 2. Sky-Blue Highlight Box without any backticks/quotes -->
+    <div class="highlight-box" id="instructionBox">
+        Please enter quantity for ...
+    </div>
+    
+    <label class="label-text" for="quantityInput">Quantity:</label>
+    <input type="number" id="quantityInput" placeholder="Enter quantity here..." required>
+    
+    <button onclick="submitToN8N()">Submit Response</button>
+    
+    <div id="successMessage" class="success-msg">Quantity Submitted Successfully! You can close this window.</div>
+</div>
 
-    <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand(); // ऐप को पूरी स्क्रीन पर खोलना
+<script>
+    // URL parameters se data extract karna
+    const urlParams = new URLSearchParams(window.location.search);
+    const n8nResponseUrl = urlParams.get('response_url'); // n8n ka automatic response url
+    const firmName = urlParams.get('firm') || 'Our Firm';
+    const instrument = urlParams.get('ins') || '';
+    const nature = urlParams.get('nat') || '';
 
-        // 1. टेलीग्राम से यूजर की ID प्राप्त करना
-        const userId = tg.initDataUnsafe?.user?.id || "TEST_USER"; 
-        
-        // 🚨 महत्वपूर्ण: नीचे दिए गए URL को अपने n8n Webhook Production URL से बदलें
-        const n8nWebhookUrl = `https://jal1020.app.n8n.cloud/webhook/87471bb9-066d-4434-85fa-79dd50c57f1e`;
+    // HTML Elements ko update karna
+    document.getElementById('firmName').innerText = firmName;
+    document.getElementById('instructionBox').innerText = `Please enter quantity for ${instrument} : ${nature}`;
 
-        let fetchedData = [];
+    function submitToN8N() {
+        const qty = document.getElementById('quantityInput').value;
+        if(!qty) return alert("Please enter quantity first!");
+        if(!n8nResponseUrl) return alert("Error: Missing response channel from n8n.");
 
-        // 2. n8n से इस ग्राहक का डेटा (गूगल शीट रिकॉर्ड) लोड करना
-        fetch(n8nWebhookUrl)
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('loading').style.display = 'none';
-                fetchedData = data;
-                
-                if(!data || data.length === 0) {
-                    document.getElementById('list-container').innerHTML = "<p style='text-align:center;'>No instruments available for you today.</p>";
-                    return;
-                }
+        // n8n Wait for Response node (Free Text) direct string body accept karta hai
+        fetch(n8nResponseUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: qty // Yeh aapki enter ki hui quantity ko seedhe n8n me bhej dega
+        })
+        .then(response => {
+            if(response.ok) {
+                document.getElementById('successMessage').style.display = 'block';
+                document.getElementById('quantityInput').disabled = true;
+                document.querySelector('button').disabled = true;
+                document.querySelector('button').style.background = '#ccc';
+            } else {
+                alert("n8n node failed to receive response.");
+            }
+        })
+        .catch(err => alert("Error connecting to n8n channel."));
+    }
+</script>
 
-                const container = document.getElementById('list-container');
-                
-                // 3. डेटा के आधार पर डायनेमिक इनपुट लिस्ट स्क्रीन पर बनाना
-                data.forEach((item, index) => {
-                    const div = document.createElement('div');
-                    div.className = 'item-container';
-                    div.innerHTML = `
-                        <div class="item-info">
-                            <div class="item-title">${item.InstrumentName}</div>
-                            <div class="item-rate">Rate: ₹${item.Rate}</div>
-                        </div>
-                        <div>
-                            <input type="number" class="input-box" id="weight-${index}" placeholder="Grams" oninput="validateForm()">
-                        </div>
-                    `;
-                    container.appendChild(div);
-                });
-            })
-            .catch(err => {
-                document.getElementById('loading').innerText = "Failed to load data. Please retry.";
-                console.error(err);
-            });
-
-        // बटन को तभी एक्टिव करना जब ग्राहक कम से कम एक बॉक्स में वजन भरे
-        function validateForm() {
-            const inputs = document.querySelectorAll('.input-box');
-            let hasValue = false;
-            inputs.forEach(input => {
-                if(input.value && parseFloat(input.value) > 0) hasValue = true;
-            });
-            document.getElementById('submitBtn').disabled = !hasValue;
-        }
-
-        // 4. सबमिट दबाने पर डेटा को टेलीग्राम बोट के पास वापस भेजना
-        function submitData() {
-            const inputs = document.querySelectorAll('.input-box');
-            const bookings = [];
-
-            inputs.forEach((input, index) => {
-                if(input.value && parseFloat(input.value) > 0) {
-                    bookings.push({
-                        instrument: fetchedData[index].InstrumentName,
-                        rate: fetchedData[index].Rate,
-                        weight: parseFloat(input.value)
-                    });
-                }
-            });
-
-            // यह टेलीग्राम का इन-बिल्ट फंक्शन है जो ऐप बंद करके डेटा बोट को सौंप देता है
-            tg.sendData(JSON.stringify(bookings));
-            tg.close();
-        }
-    </script>
 </body>
 </html>
